@@ -1,0 +1,11 @@
+#!/bin/bash
+echo "To get Firebase Admin credentials:"
+echo "1. Go to: https://console.firebase.google.com/project/permit-tracker-8f6bb/settings/serviceaccounts/adminsdk"
+echo "2. Click 'Generate new private key'"
+echo "3. Download the JSON file"
+echo "4. Extract the following values:"
+echo "   - project_id -> FIREBASE_PROJECT_ID"
+echo "   - client_email -> FIREBASE_CLIENT_EMAIL"
+echo "   - private_key -> FIREBASE_PRIVATE_KEY (keep the \\n characters)"
+echo ""
+echo "Then update .env.local with these values"
