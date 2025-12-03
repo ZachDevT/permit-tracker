@@ -368,8 +368,8 @@ export class BDESScraper {
               const svg = svgElements.nth(i);
               const parent = svg.locator('..');
               
-              if (await parent.isVisible()) {
-                const parentClass = await parent.getAttribute('class').catch(() => '');
+                if (await parent.isVisible()) {
+                const parentClass = await parent.getAttribute('class').catch(() => '') || '';
                 if (parentClass.includes('Button') || parentClass.includes('button')) {
                   await parent.click({ timeout: 2000 });
                   await page.waitForTimeout(2000);
