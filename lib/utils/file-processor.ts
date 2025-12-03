@@ -11,6 +11,12 @@ export interface CompanyOutput extends CompanyInput {
   permitPageLink: string | null;
   status: string;
   errorMessage?: string;
+  steps?: Array<{
+    step: string;
+    status: "success" | "error" | "pending";
+    message?: string;
+    timestamp: Date;
+  }>;
 }
 
 export async function parseInputFile(file: File): Promise<CompanyInput[]> {

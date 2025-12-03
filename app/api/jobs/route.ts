@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { initializeFirebaseAdmin } from "@/lib/firebase/admin";
-import { BDESScraper, PermitResult } from "@/lib/scraper/bdes-scraper";
+import { BDESScraper } from "@/lib/scraper/bdes-scraper";
+import { PermitResult } from "@/lib/types/scraping";
 import { parseInputFile, generateOutputFile, CompanyInput, CompanyOutput } from "@/lib/utils/file-processor";
 
 // Mark as dynamic route

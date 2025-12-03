@@ -3,7 +3,7 @@
 import { CheckCircle2, XCircle, Clock, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
-interface ScrapingStep {
+export interface ScrapingStep {
   step: string;
   status: "success" | "error" | "pending";
   message?: string;
