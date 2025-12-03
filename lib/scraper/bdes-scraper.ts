@@ -318,7 +318,7 @@ export class BDESScraper {
                 const buttonText = await button.textContent().catch(() => '');
                 
                 // Check if it might be the stethoscope (usually has no text, just an icon)
-                if ((!buttonText || buttonText.trim() === '') && (buttonClass.includes('Button') || buttonTitle)) {
+                if ((!buttonText || buttonText.trim() === '') && ((buttonClass && buttonClass.includes('Button')) || buttonTitle)) {
                   // Try clicking it - if it's the stethoscope, results panel should appear
                   await button.click({ timeout: 2000 });
                   await page.waitForTimeout(3000);
