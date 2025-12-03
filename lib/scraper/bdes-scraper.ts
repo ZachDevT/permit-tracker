@@ -38,7 +38,7 @@ export class BDESScraper {
       const stepObj: ScrapingStep = {
         step,
         status,
-        message,
+        message: message || "", // Ensure message is never undefined
         timestamp: new Date(),
       };
       result.steps?.push(stepObj);
@@ -176,9 +176,16 @@ export class BDESScraper {
       
       // Verify if conditions were accepted
       if (!conditionsAccepted) {
-        // Check if modal is still visible
-        const conditionsModal = page.locator('text=/conditions/i, text=/utilisation/i, [class*="dialog"]:has-text("conditions")');
-        const modalCount = await conditionsModal.count();
+        // Check if modal is still visible - use separate selectors
+        const conditionsText = page.locator('text=/conditions/i').first();
+        const utilisationText = page.locator('text=/utilisation/i').first();
+        const conditionsDialog = page.locator('[class*="dialog"]:has-text("conditions")').first();
+        
+        const conditionsCount = await conditionsText.count();
+        const utilisationCount = await utilisationText.count();
+        const dialogCount = await conditionsDialog.count();
+        
+        const modalCount = conditionsCount + utilisationCount + dialogCount;
         
         if (modalCount > 0) {
           addStep("Gestion des conditions d'utilisation", "error", "Modal toujours visible");

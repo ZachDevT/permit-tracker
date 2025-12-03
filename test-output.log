@@ -1,0 +1,88 @@
+📍 Step 1: Navigating to BDES...
+✅ Page loaded
+📍 Step 2: Checking for conditions modal...
+✅ Checkbox checked
+📍 Step 3: Closing help dialog...
+📍 Step 4: Finding search input...
+✅ Search input found
+📍 Step 5: Filling address "herve"...
+✅ Address filled
+📍 Step 6: Clicking search icon...
+Found 0 buttons near input
+⚠️  Search icon not found, trying Enter...
+📍 Step 7: Waiting for suggestions...
+⚠️  No suggestions found
+📍 Step 8: Waiting for map to load...
+✅ Map should be loaded
+📍 Step 9: Looking for stethoscope icon...
+⚠️  Stethoscope not found, trying all toolbar buttons...
+Found toolbar with selector: .dijitToolbar
+Found 1 buttons in toolbar
+  Button 0: class="dijitReset dijitStretch dijitButtonContents dijitDownArrowButton", title="", aria-label=""
+Found toolbar with selector: [class*="toolbar"]
+Found 7 buttons in toolbar
+  Button 0: class="dijitReset dijitStretch dijitButtonContents", title="Recherche avancée", aria-label=""
+  Button 1: class="dijitReset dijitStretch dijitButtonContents", title="Mesurer", aria-label=""
+  Button 2: class="dijitReset dijitStretch dijitButtonContents", title="Imprimer cette vue", aria-label=""
+  Button 3: class="dijitReset dijitStretch dijitButtonContents", title="Tracer des cercles concentriques", aria-label=""
+  Button 4: class="dijitReset dijitStretch dijitButtonContents", title="Dessiner", aria-label=""
+  Button 5: class="dijitReset dijitStretch dijitButtonContents", title="Informations sur l'état des sols", aria-label=""
+  Button 6: class="dijitReset dijitStretch dijitButtonContents", title="Aide", aria-label=""
+Found toolbar with selector: [class*="Toolbar"]
+Found 1 buttons in toolbar
+  Button 0: class="dijitReset dijitStretch dijitButtonContents dijitDownArrowButton", title="", aria-label=""
+❌ Error: locator.click: Timeout 2000ms exceeded.
+Call log:
+  - waiting for locator('.myCustomAdvancedIdentifyButton, [class*="myCustomAdvancedIdentify"]').first()
+    - locator resolved to <span data-dojo-attach-point="iconNode" class="dijitReset dijitInline dijitIcon myCustomAdvancedIdentifyButton"></span>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="ui-widget-overlay" id="A3116:form:j_idt16_modal"></div> intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="ui-widget-overlay" id="A3116:form:j_idt16_modal"></div> intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    4 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="ui-widget-overlay" id="A3116:form:j_idt16_modal"></div> intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+locator.click: Timeout 2000ms exceeded.
+Call log:
+  - waiting for locator('.myCustomAdvancedIdentifyButton, [class*="myCustomAdvancedIdentify"]').first()
+    - locator resolved to <span data-dojo-attach-point="iconNode" class="dijitReset dijitInline dijitIcon myCustomAdvancedIdentifyButton"></span>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="ui-widget-overlay" id="A3116:form:j_idt16_modal"></div> intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="ui-widget-overlay" id="A3116:form:j_idt16_modal"></div> intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    4 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div class="ui-widget-overlay" id="A3116:form:j_idt16_modal"></div> intercepts pointer events
+    - retrying click action
+      - waiting 500ms
+
+    at testScraper (/Users/mac/Projects/PermitTracker/test-scraper.js:243:32)

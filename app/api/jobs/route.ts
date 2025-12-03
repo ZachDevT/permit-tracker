@@ -75,20 +75,35 @@ async function processJob(jobId: string, companies: CompanyInput[]) {
 
       // Scrape permit data with step updates
       const result = await scraper.scrapePermit(company, address, async (step) => {
-        // Update job with current step
+        // Update job with current step - ensure no undefined values
         await jobRef.update({
-          currentStep: step.step,
-          currentStepStatus: step.status,
-          currentStepMessage: step.message,
+          currentStep: step.step || "",
+          currentStepStatus: step.status || "pending",
+          currentStepMessage: step.message || "",
           updatedAt: new Date(),
         });
       });
       
-      results.push(result);
-
+      // Clean result to remove undefined values from steps
+      const cleanedResult = {
+        ...result,
+        steps: result.steps?.map(step => ({
+          ...step,
+          message: step.message || "",
+        })) || [],
+      };
+      
+      results.push(cleanedResult);
+      
       // Update results
       await jobRef.update({
-        results: results,
+        results: results.map(r => ({
+          ...r,
+          steps: r.steps?.map(step => ({
+            ...step,
+            message: step.message || "",
+          })) || [],
+        })),
         updatedAt: new Date(),
       });
 
