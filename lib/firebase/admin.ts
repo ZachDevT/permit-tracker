@@ -43,18 +43,8 @@ function initializeFirebaseAdmin() {
 }
 
 // Initialize on import for server-side usage
-if (typeof window === "undefined") {
-  try {
-    const initialized = initializeFirebaseAdmin();
-    app = initialized.app;
-    db = initialized.db;
-    storage = initialized.storage;
-  } catch (error) {
-    // During build time, credentials might not be available
-    // This is okay, we'll initialize when actually needed
-    console.warn("Firebase Admin not initialized:", error instanceof Error ? error.message : "Unknown error");
-  }
-}
+// Note: We don't initialize during build to avoid errors
+// Initialization happens lazily when functions are called
 
 export { app, db, storage, initializeFirebaseAdmin };
 

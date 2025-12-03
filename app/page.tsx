@@ -90,8 +90,11 @@ export default function Home() {
           <h1 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white mb-2">
             Permit Tracker
           </h1>
-          <p className="text-lg text-gray-600 dark:text-gray-300">
+          <p className="text-lg text-gray-600 dark:text-gray-300 mb-2">
             Automated extraction of environmental permit dates from BDES portal
+          </p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Version 1.0.0 - Production Ready
           </p>
         </div>
 
