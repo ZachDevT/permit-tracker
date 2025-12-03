@@ -1,5 +1,12 @@
 import { chromium, Browser, Page } from "playwright";
 
+export interface ScrapingStep {
+  step: string;
+  status: "success" | "error" | "pending";
+  message?: string;
+  timestamp: Date;
+}
+
 export interface PermitResult {
   company: string;
   address: string;
@@ -7,6 +14,7 @@ export interface PermitResult {
   permitPageLink: string | null;
   status: "SUCCESS" | "ADDRESS_NOT_FOUND" | "MULTIPLE_PARCELS" | "NO_PERMIT_DATA" | "ERROR";
   errorMessage?: string;
+  steps?: ScrapingStep[];
 }
 
 export class BDESScraper {
@@ -30,13 +38,27 @@ export class BDESScraper {
     }
   }
 
-  async scrapePermit(company: string, address: string): Promise<PermitResult> {
+  async scrapePermit(company: string, address: string, onStepUpdate?: (step: ScrapingStep) => void): Promise<PermitResult> {
     const result: PermitResult = {
       company,
       address,
       latestPermitDate: null,
       permitPageLink: null,
       status: "ERROR",
+      steps: [],
+    };
+
+    const addStep = (step: string, status: "success" | "error" | "pending", message?: string) => {
+      const stepObj: ScrapingStep = {
+        step,
+        status,
+        message,
+        timestamp: new Date(),
+      };
+      result.steps?.push(stepObj);
+      if (onStepUpdate) {
+        onStepUpdate(stepObj);
+      }
     };
 
     if (!this.browser) {
@@ -51,12 +73,14 @@ export class BDESScraper {
     const page = await context.newPage();
 
     try {
-      // Navigate to the BDES map
+      // Step 0: Navigate to the BDES map
+      addStep("Navigation vers BDES", "pending");
       await page.goto(this.BASE_URL, { waitUntil: "networkidle", timeout: this.TIMEOUT });
       await page.waitForTimeout(2000);
+      addStep("Navigation vers BDES", "success", "Page chargée");
 
       // Step 1: Handle "Informations et conditions d'utilisation" modal
-      // Wait a bit for modals to appear
+      addStep("Gestion des conditions d'utilisation", "pending");
       await page.waitForTimeout(3000);
 
       // Look for the terms and conditions acceptance modal
@@ -105,11 +129,17 @@ export class BDESScraper {
         }
       } catch (e) {
         // Modal might not be present, continue
-        console.log("Terms modal not found or already accepted");
+        addStep("Gestion des conditions d'utilisation", "success", "Modal non présente ou déjà acceptée");
+      }
+      
+      // Check if we actually accepted
+      const termsStillVisible = await page.locator('text=/conditions d\'utilisation/i').count();
+      if (termsStillVisible === 0) {
+        addStep("Gestion des conditions d'utilisation", "success", "Conditions acceptées");
       }
 
       // Step 2: Handle "Mode d'emploi et conseils d'utilisation" dialog
-      // Wait a bit more for the help dialog to appear
+      addStep("Fermeture du dialog d'aide", "pending");
       await page.waitForTimeout(2000);
 
       try {
@@ -145,16 +175,24 @@ export class BDESScraper {
         }
       } catch (e) {
         // Dialog might not be present, continue
-        console.log("Help dialog not found or already closed");
+        addStep("Fermeture du dialog d'aide", "success", "Dialog non présent ou déjà fermé");
+      }
+      
+      const helpStillVisible = await page.locator('text=/Mode d\'emploi/i').count();
+      if (helpStillVisible === 0) {
+        addStep("Fermeture du dialog d'aide", "success", "Dialog fermé");
       }
 
       // Step 3: Wait for the search field to be available
+      addStep("Recherche du champ d'adresse", "pending");
       await page.waitForSelector('input[type="text"], input[placeholder*="Adresse"], input[placeholder*="adresse"], input[placeholder*="rue"]', {
         timeout: 15000,
       });
       await page.waitForTimeout(1000);
+      addStep("Recherche du champ d'adresse", "success", "Champ trouvé");
 
       // Step 4: Find and fill the search input (address bar)
+      addStep("Saisie de l'adresse", "pending");
       const searchInputSelectors = [
         'input[placeholder*="Adresse"]',
         'input[placeholder*="adresse"]',
@@ -185,13 +223,79 @@ export class BDESScraper {
 
       await searchInput.fill(address);
       await page.waitForTimeout(2000);
+      addStep("Saisie de l'adresse", "success", `Adresse "${address}" saisie`);
 
-      // Wait for suggestions to appear and click on the first one
+      // Step 5: Click on the search icon (magnifying glass) - IMPORTANT: Click icon, not Enter
+      addStep("Clic sur l'icône de recherche", "pending");
+      
+      // Find the search button/icon next to the input
+      // Based on images: it's a button with class like SpwGeolocalisationSearchInputButton
+      const searchButtonSelectors = [
+        '.SpwGeolocalisationSearchInputButton',
+        'button:has([class*="search"])',
+        'button:has([class*="Search"])',
+        '[class*="SpwGeolocalisationSearchInput"] button',
+        'input[placeholder*="Adresse"] + button',
+        'input[placeholder*="Adresse"] ~ button',
+        '.dijitButton:has([class*="search"])',
+        // Look for magnifying glass icon
+        'button:has(svg)',
+        '[class*="searchButton"]',
+      ];
+
+      let searchIconClicked = false;
+      for (const selector of searchButtonSelectors) {
+        try {
+          const searchButton = page.locator(selector).first();
+          if (await searchButton.count() > 0 && await searchButton.isVisible()) {
+            await searchButton.click({ timeout: 2000 });
+            await page.waitForTimeout(2000);
+            searchIconClicked = true;
+            addStep("Clic sur l'icône de recherche", "success", "Icône de recherche cliquée");
+            break;
+          }
+        } catch (e) {
+          // Continue
+        }
+      }
+
+      // Fallback: Look for the search button near the input field
+      if (!searchIconClicked) {
+        try {
+          // Get the input's parent and look for button inside
+          const inputParent = searchInput.locator('..');
+          const buttonInParent = inputParent.locator('button').first();
+          if (await buttonInParent.count() > 0) {
+            await buttonInParent.click({ timeout: 2000 });
+            await page.waitForTimeout(2000);
+            searchIconClicked = true;
+            addStep("Clic sur l'icône de recherche", "success", "Bouton de recherche trouvé et cliqué");
+          }
+        } catch (e) {
+          // Continue
+        }
+      }
+
+      // If still not clicked, try pressing Enter as last resort
+      if (!searchIconClicked) {
+        await searchInput.press("Enter");
+        await page.waitForTimeout(3000);
+        addStep("Clic sur l'icône de recherche", "success", "Utilisation de Enter (fallback)");
+      }
+
+      // Step 6: Wait for search results and click on the first suggestion
+      addStep("Sélection d'un résultat de recherche", "pending");
+      await page.waitForTimeout(2000);
+
+      // Wait for suggestions/dropdown to appear
       const suggestionSelectors = [
         '.dijitComboBoxMenu',
+        '.dijitComboBoxMenuPopup',
         '.dijitMenuItem',
         '[role="option"]',
-        '.suggestion',
+        '.dijitPopup:has(.dijitMenuItem)',
+        '[class*="suggestion"]',
+        '[class*="Suggestion"]',
         'li:has-text("' + address.split(',')[0] + '")',
       ];
 
@@ -201,26 +305,36 @@ export class BDESScraper {
           const suggestions = page.locator(selector);
           const count = await suggestions.count();
           if (count > 0) {
-            await suggestions.first().click();
-            await page.waitForTimeout(2000);
-            suggestionClicked = true;
-            break;
+            // Wait for suggestions to be visible
+            await page.waitForTimeout(1000);
+            const firstSuggestion = suggestions.first();
+            if (await firstSuggestion.isVisible()) {
+              await firstSuggestion.click({ timeout: 2000 });
+              await page.waitForTimeout(3000);
+              suggestionClicked = true;
+              addStep("Sélection d'un résultat de recherche", "success", "Première suggestion cliquée");
+              break;
+            }
           }
         } catch (e) {
           // Continue
         }
       }
 
-      // If no suggestions, press Enter
       if (!suggestionClicked) {
-        await searchInput.press("Enter");
-        await page.waitForTimeout(3000);
+        addStep("Sélection d'un résultat de recherche", "error", "Aucune suggestion trouvée");
+        result.status = "ADDRESS_NOT_FOUND";
+        result.errorMessage = "No search suggestions found";
+        return result;
       }
 
-      // Step 5: Wait for map to load
+      // Step 7: Wait for map to load after search
+      addStep("Chargement de la carte", "pending");
       await page.waitForTimeout(3000);
+      addStep("Chargement de la carte", "success", "Carte chargée");
 
-      // Step 6: Click the stethoscope icon (medical tool icon) - identification tool
+      // Step 8: Click the stethoscope icon (medical tool icon) - identification tool
+      addStep("Activation de l'outil stethoscope", "pending");
       // The stethoscope icon is in the toolbar above the map
       // Based on the images, it's one of the icons in the toolbar row (usually 6th or 7th icon)
       
@@ -401,12 +515,16 @@ export class BDESScraper {
       }
 
       if (!stethoscopeClicked) {
+        addStep("Activation de l'outil stethoscope", "error", "Icône stethoscope non trouvée");
         result.status = "ADDRESS_NOT_FOUND";
         result.errorMessage = "Stethoscope/identification tool not found. Please verify the page structure.";
         return result;
       }
+      
+      addStep("Activation de l'outil stethoscope", "success", "Outil d'identification activé");
 
-      // Step 7: Click on the map to identify parcels (after stethoscope is activated)
+      // Step 9: Click on the map to identify parcels (after stethoscope is activated)
+      addStep("Clic sur la carte pour identifier les parcelles", "pending");
       // The stethoscope tool should now be active, click on the map center
       const mapSelectors = [
         '#esri\\.Map_0_container',
@@ -439,12 +557,16 @@ export class BDESScraper {
       }
 
       if (!mapClicked) {
+        addStep("Clic sur la carte pour identifier les parcelles", "error", "Impossible de cliquer sur la carte");
         result.status = "ADDRESS_NOT_FOUND";
         result.errorMessage = "Could not click on map";
         return result;
       }
+      
+      addStep("Clic sur la carte pour identifier les parcelles", "success", "Clic sur la carte effectué");
 
-      // Step 8: Wait for identification results panel and find parcel link
+      // Step 10: Wait for identification results panel and find parcel link
+      addStep("Attente des résultats d'identification", "pending");
       await page.waitForTimeout(3000);
 
       // Look for "RÉSULTAT DE L'IDENTIFICATION" panel
@@ -617,29 +739,38 @@ export class BDESScraper {
       }
 
       if (!parcelClicked) {
+        addStep("Sélection de la parcelle", "error", "Aucune parcelle trouvée ou impossible de cliquer");
         result.status = "ADDRESS_NOT_FOUND";
         result.errorMessage = "No parcels found in identification results or could not click on parcel";
         return result;
       }
+      
+      addStep("Sélection de la parcelle", "success", "Parcelle sélectionnée");
 
       // Check if multiple parcels were found
       const parcelRows = await page.locator('table tr:has-text("Section"), table tr:has-text("Radical")').count();
       if (parcelRows > 2) {
         result.status = "MULTIPLE_PARCELS";
+        addStep("Sélection de la parcelle", "success", `Plusieurs parcelles trouvées (${parcelRows})`);
       }
 
-      // Get the current URL (parcel information page)
+      // Step 11: Get the current URL (parcel information page)
+      addStep("Navigation vers la page de la parcelle", "pending");
+      await page.waitForTimeout(2000);
+      
+      // Wait for navigation to parcel detail page
+      await page.waitForLoadState("networkidle", { timeout: 10000 });
       const currentUrl = page.url();
       result.permitPageLink = currentUrl;
+      addStep("Navigation vers la page de la parcelle", "success", `URL: ${currentUrl}`);
 
-      // Wait for the page to load
-      await page.waitForLoadState("networkidle", { timeout: 10000 });
-
-      // Look for "Procédures" tab
+      // Step 12: Look for "Procédures" tab
+      addStep("Ouverture de l'onglet Procédures", "pending");
       const proceduresTabSelector = 'button:has-text("Procédures"), a:has-text("Procédures"), [role="tab"]:has-text("Procédures"), [class*="tab"]:has-text("Procédures")';
       const proceduresTab = page.locator(proceduresTabSelector).first();
 
       if (await proceduresTab.count() === 0) {
+        addStep("Ouverture de l'onglet Procédures", "error", "Onglet Procédures non trouvé");
         result.status = "NO_PERMIT_DATA";
         result.errorMessage = "Procédures tab not found";
         return result;
@@ -647,11 +778,15 @@ export class BDESScraper {
 
       await proceduresTab.click();
       await page.waitForTimeout(2000);
+      addStep("Ouverture de l'onglet Procédures", "success", "Onglet Procédures ouvert");
 
-      // Wait for the procedures table to load
+      // Step 13: Wait for the procedures table to load
+      addStep("Chargement du tableau des procédures", "pending");
       await page.waitForSelector('table, [class*="table"], [role="table"]', { timeout: 10000 });
+      addStep("Chargement du tableau des procédures", "success", "Tableau chargé");
 
-      // Extract permit data from the table
+      // Step 14: Extract permit data from the table
+      addStep("Extraction des données de permis", "pending");
       const table = page.locator('table, [class*="table"], [role="table"]').first();
       
       // Find all rows (skip header row)
@@ -739,12 +874,15 @@ export class BDESScraper {
       if (latestDate) {
         result.latestPermitDate = latestDate;
         result.status = "SUCCESS";
+        addStep("Extraction des données de permis", "success", `Date trouvée: ${latestDate}`);
       } else {
         result.status = "NO_PERMIT_DATA";
         result.errorMessage = "No 'Permis délivré' entries found";
+        addStep("Extraction des données de permis", "error", "Aucun 'Permis délivré' trouvé");
       }
     } catch (error: any) {
       console.error(`Error scraping permit for ${company}:`, error);
+      addStep("Erreur générale", "error", error.message || "Unknown error occurred");
       result.status = "ERROR";
       result.errorMessage = error.message || "Unknown error occurred";
     } finally {

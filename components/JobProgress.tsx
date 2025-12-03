@@ -68,9 +68,21 @@ export function JobProgress({ jobStatus, onDownload }: JobProgressProps) {
         </div>
 
         {jobStatus?.currentCompany && (
-          <div className="text-sm text-gray-600 dark:text-gray-400">
+          <div className="text-sm text-gray-600 dark:text-gray-400 mb-3">
             <span className="font-medium">Processing:</span>{" "}
             {jobStatus.currentCompany}
+          </div>
+        )}
+
+        {jobStatus?.currentStep && (
+          <div className="text-xs text-gray-500 dark:text-gray-500 mb-2">
+            <span className="font-medium">Current Step:</span>{" "}
+            <span className={jobStatus.currentStepStatus === "error" ? "text-red-500" : jobStatus.currentStepStatus === "success" ? "text-green-500" : "text-blue-500"}>
+              {jobStatus.currentStep}
+            </span>
+            {jobStatus.currentStepMessage && (
+              <span className="ml-2 text-gray-400">({jobStatus.currentStepMessage})</span>
+            )}
           </div>
         )}
 

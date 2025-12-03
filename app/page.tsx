@@ -6,6 +6,7 @@ import { FileUpload } from "@/components/FileUpload";
 import { JobProgress } from "@/components/JobProgress";
 import { ResultsTable } from "@/components/ResultsTable";
 import { StatsCard } from "@/components/StatsCard";
+import { ScrapingSteps } from "@/components/ScrapingSteps";
 
 export default function Home() {
   const [jobId, setJobId] = useState<string | null>(null);
@@ -135,10 +136,20 @@ export default function Home() {
             {!jobId ? (
               <FileUpload onFileSelect={handleFileUpload} />
             ) : (
-              <JobProgress
-                jobStatus={jobStatus}
-                onDownload={handleDownload}
-              />
+              <>
+                <JobProgress
+                  jobStatus={jobStatus}
+                  onDownload={handleDownload}
+                />
+                {jobStatus && (
+                  <ScrapingSteps
+                    steps={jobStatus.results?.[jobStatus.results.length - 1]?.steps}
+                    currentStep={jobStatus.currentStep}
+                    currentStepStatus={jobStatus.currentStepStatus}
+                    currentStepMessage={jobStatus.currentStepMessage}
+                  />
+                )}
+              </>
             )}
           </div>
 

@@ -72,8 +72,17 @@ async function processJob(jobId: string, companies: CompanyInput[]) {
         updatedAt: new Date(),
       });
 
-      // Scrape permit data
-      const result = await scraper.scrapePermit(company, address);
+      // Scrape permit data with step updates
+      const result = await scraper.scrapePermit(company, address, async (step) => {
+        // Update job with current step
+        await jobRef.update({
+          currentStep: step.step,
+          currentStepStatus: step.status,
+          currentStepMessage: step.message,
+          updatedAt: new Date(),
+        });
+      });
+      
       results.push(result);
 
       // Update results
@@ -135,6 +144,9 @@ export async function GET(request: NextRequest) {
       total: jobData?.total,
       processed: jobData?.processed,
       currentCompany: jobData?.currentCompany,
+      currentStep: jobData?.currentStep,
+      currentStepStatus: jobData?.currentStepStatus,
+      currentStepMessage: jobData?.currentStepMessage,
       results: jobData?.results || [],
       error: jobData?.error,
       createdAt: jobData?.createdAt?.toDate?.()?.toISOString(),
