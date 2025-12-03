@@ -53,94 +53,392 @@ export class BDESScraper {
     try {
       // Navigate to the BDES map
       await page.goto(this.BASE_URL, { waitUntil: "networkidle", timeout: this.TIMEOUT });
-
-      // Wait for the search field to be available
-      await page.waitForSelector('input[type="text"], input[placeholder*="rue"], input[placeholder*="adresse"]', {
-        timeout: 10000,
-      });
-
-      // Find and fill the search input
-      const searchInput = await page.locator('input[type="text"]').first();
-      await searchInput.fill(address);
-      await page.waitForTimeout(1000);
-
-      // Press Enter or click search button
-      await searchInput.press("Enter");
       await page.waitForTimeout(2000);
 
-      // Wait for map to load and look for stethoscope icon or parcel markers
+      // Step 1: Handle "Informations et conditions d'utilisation" modal
+      // Wait a bit for modals to appear
       await page.waitForTimeout(3000);
 
-      // Look for stethoscope icon (medical cross icon) or parcel identification tool
-      const stethoscopeSelector = 'button[title*="identification"], button[aria-label*="identification"], .leaflet-control-identify, [class*="identify"], [class*="stethoscope"]';
-      
-      // Try to find and click the stethoscope/identify button
-      const identifyButton = page.locator(stethoscopeSelector).first();
-      const buttonCount = await identifyButton.count();
-
-      if (buttonCount === 0) {
-        // Alternative: look for clickable parcels on the map
-        // Click on the map area where parcels might be
-        const mapContainer = page.locator('.leaflet-container, [class*="map"], [id*="map"]').first();
-        
-        if (await mapContainer.count() > 0) {
-          // Get map bounds and click center
-          const mapBox = await mapContainer.boundingBox();
-          if (mapBox) {
-            await page.mouse.click(mapBox.x + mapBox.width / 2, mapBox.y + mapBox.height / 2);
-            await page.waitForTimeout(2000);
-          }
-        } else {
-          result.status = "ADDRESS_NOT_FOUND";
-          result.errorMessage = "Could not find map or identification tool";
-          return result;
-        }
-      } else {
-        await identifyButton.click();
-        await page.waitForTimeout(1000);
-      }
-
-      // Wait for parcel popup or identification results
-      await page.waitForTimeout(2000);
-
-      // Look for parcel name/link in popup or results panel
-      const parcelLinkSelector = 'a[href*="parcelle"], .parcel-name, [class*="parcel"], [data-parcel]';
-      const parcelLinks = page.locator(parcelLinkSelector);
-
-      const parcelCount = await parcelLinks.count();
-
-      if (parcelCount === 0) {
-        // Try alternative selectors for parcel information
-        const altSelectors = [
-          'text=/parcelle/i',
-          '[title*="parcelle"]',
-          '.result-item',
-          '[class*="result"]',
+      // Look for the terms and conditions acceptance modal
+      try {
+        // Method 1: Look for checkbox with "J'ai lu et j'accepte"
+        const checkboxSelectors = [
+          'input[type="checkbox"]:near(:text("J\'ai lu"))',
+          'input[type="checkbox"]:near(:text("accepte"))',
+          'label:has-text("J\'ai lu") input[type="checkbox"]',
+          '.dijitCheckBox:has-text("J\'ai lu")',
         ];
 
-        let found = false;
-        for (const selector of altSelectors) {
-          const elements = page.locator(selector);
-          if (await elements.count() > 0) {
-            found = true;
-            await elements.first().click();
-            await page.waitForTimeout(2000);
-            break;
+        for (const selector of checkboxSelectors) {
+          try {
+            const checkbox = page.locator(selector).first();
+            if (await checkbox.count() > 0 && await checkbox.isVisible()) {
+              await checkbox.check({ timeout: 2000 });
+              await page.waitForTimeout(1000);
+              break;
+            }
+          } catch (e) {
+            // Try next selector
           }
         }
 
-        if (!found) {
-          result.status = "ADDRESS_NOT_FOUND";
-          result.errorMessage = "No parcels found for this address";
-          return result;
+        // Method 2: Look for Accept button
+        const acceptButtonSelectors = [
+          'button:has-text("Accepter")',
+          'button:has-text("Accept")',
+          '[role="button"]:has-text("Accepter")',
+          '.dijitButton:has-text("Accepter")',
+          'span:has-text("Accepter"):visible',
+        ];
+
+        for (const selector of acceptButtonSelectors) {
+          try {
+            const acceptButton = page.locator(selector).first();
+            if (await acceptButton.count() > 0 && await acceptButton.isVisible()) {
+              await acceptButton.click({ timeout: 2000 });
+              await page.waitForTimeout(2000);
+              break;
+            }
+          } catch (e) {
+            // Try next selector
+          }
         }
-      } else if (parcelCount === 1) {
-        await parcelLinks.first().click();
-        await page.waitForTimeout(2000);
-      } else {
-        // Multiple parcels found - click the first one or handle differently
-        await parcelLinks.first().click();
-        await page.waitForTimeout(2000);
+      } catch (e) {
+        // Modal might not be present, continue
+        console.log("Terms modal not found or already accepted");
+      }
+
+      // Step 2: Handle "Mode d'emploi et conseils d'utilisation" dialog
+      // Wait a bit more for the help dialog to appear
+      await page.waitForTimeout(2000);
+
+      try {
+        // Look for close button (X) in dialog title bar
+        const closeButtonSelectors = [
+          '.dijitDialogCloseIcon',
+          '[class*="dijitDialogClose"]',
+          'button[title*="Fermer"]',
+          'button[aria-label*="Fermer"]',
+          'button[aria-label*="Close"]',
+          'span[class*="close"]:visible',
+          '.dijitTitleBar .dijitDialogCloseIcon',
+        ];
+
+        for (const selector of closeButtonSelectors) {
+          try {
+            const closeButton = page.locator(selector).first();
+            if (await closeButton.count() > 0 && await closeButton.isVisible()) {
+              await closeButton.click({ timeout: 2000 });
+              await page.waitForTimeout(1500);
+              break;
+            }
+          } catch (e) {
+            // Try next selector
+          }
+        }
+
+        // Alternative: Look for "Fermer" button
+        const fermerButton = page.locator('button:has-text("Fermer"), span:has-text("Fermer"):visible').first();
+        if (await fermerButton.count() > 0 && await fermerButton.isVisible()) {
+          await fermerButton.click({ timeout: 2000 });
+          await page.waitForTimeout(1500);
+        }
+      } catch (e) {
+        // Dialog might not be present, continue
+        console.log("Help dialog not found or already closed");
+      }
+
+      // Step 3: Wait for the search field to be available
+      await page.waitForSelector('input[type="text"], input[placeholder*="Adresse"], input[placeholder*="adresse"], input[placeholder*="rue"]', {
+        timeout: 15000,
+      });
+      await page.waitForTimeout(1000);
+
+      // Step 4: Find and fill the search input (address bar)
+      const searchInputSelectors = [
+        'input[placeholder*="Adresse"]',
+        'input[placeholder*="adresse"]',
+        'input[type="text"]:visible',
+      ];
+
+      let searchInput = null;
+      for (const selector of searchInputSelectors) {
+        const inputs = page.locator(selector);
+        const count = await inputs.count();
+        if (count > 0) {
+          // Get the first visible input
+          for (let i = 0; i < count; i++) {
+            const input = inputs.nth(i);
+            const isVisible = await input.isVisible();
+            if (isVisible) {
+              searchInput = input;
+              break;
+            }
+          }
+          if (searchInput) break;
+        }
+      }
+
+      if (!searchInput) {
+        searchInput = page.locator('input[type="text"]').first();
+      }
+
+      await searchInput.fill(address);
+      await page.waitForTimeout(2000);
+
+      // Wait for suggestions to appear and click on the first one
+      const suggestionSelectors = [
+        '.dijitComboBoxMenu',
+        '.dijitMenuItem',
+        '[role="option"]',
+        '.suggestion',
+        'li:has-text("' + address.split(',')[0] + '")',
+      ];
+
+      let suggestionClicked = false;
+      for (const selector of suggestionSelectors) {
+        try {
+          const suggestions = page.locator(selector);
+          const count = await suggestions.count();
+          if (count > 0) {
+            await suggestions.first().click();
+            await page.waitForTimeout(2000);
+            suggestionClicked = true;
+            break;
+          }
+        } catch (e) {
+          // Continue
+        }
+      }
+
+      // If no suggestions, press Enter
+      if (!suggestionClicked) {
+        await searchInput.press("Enter");
+        await page.waitForTimeout(3000);
+      }
+
+      // Step 5: Wait for map to load
+      await page.waitForTimeout(3000);
+
+      // Step 6: Click the stethoscope icon (medical tool icon) - identification tool
+      const stethoscopeSelectors = [
+        '[class*="stethoscope"]',
+        '[class*="identify"]',
+        'button[title*="identification"]',
+        'button[aria-label*="identification"]',
+        '[title*="identifier"]',
+        '.dijitButton:has([class*="stethoscope"])',
+        '.dijitButton:has([class*="identify"])',
+        'span:has([class*="stethoscope"])',
+      ];
+
+      let stethoscopeClicked = false;
+      for (const selector of stethoscopeSelectors) {
+        try {
+          const stethoscope = page.locator(selector).first();
+          if (await stethoscope.count() > 0) {
+            const isVisible = await stethoscope.isVisible();
+            if (isVisible) {
+              await stethoscope.click();
+              await page.waitForTimeout(2000);
+              stethoscopeClicked = true;
+              break;
+            }
+          }
+        } catch (e) {
+          // Continue
+        }
+      }
+
+      if (!stethoscopeClicked) {
+        result.status = "ADDRESS_NOT_FOUND";
+        result.errorMessage = "Stethoscope/identification tool not found";
+        return result;
+      }
+
+      // Step 7: Click on the map to identify parcels (after stethoscope is activated)
+      // The stethoscope tool should now be active, click on the map center
+      const mapSelectors = [
+        '#esri\\.Map_0_container',
+        '.esriMapContainer',
+        '[id*="map"]',
+        '[class*="map"]',
+        '.dijitContentPane:has([id*="map"])',
+      ];
+
+      let mapClicked = false;
+      for (const selector of mapSelectors) {
+        try {
+          const mapContainer = page.locator(selector).first();
+          if (await mapContainer.count() > 0) {
+            const isVisible = await mapContainer.isVisible();
+            if (isVisible) {
+              const box = await mapContainer.boundingBox();
+              if (box) {
+                // Click center of map
+                await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+                await page.waitForTimeout(3000);
+                mapClicked = true;
+                break;
+              }
+            }
+          }
+        } catch (e) {
+          // Continue
+        }
+      }
+
+      if (!mapClicked) {
+        result.status = "ADDRESS_NOT_FOUND";
+        result.errorMessage = "Could not click on map";
+        return result;
+      }
+
+      // Step 8: Wait for identification results panel and find parcel link
+      await page.waitForTimeout(3000);
+
+      // Look for "RÉSULTAT DE L'IDENTIFICATION" panel
+      // The results should appear in a panel, usually at the bottom or side
+      const resultPanelSelectors = [
+        'text=/RÉSULTAT DE L\'IDENTIFICATION/i',
+        'text=/RESULTAT/i',
+        '[id*="result"]',
+        '[class*="result"]',
+        '.dijitContentPane:has-text("Parcelles")',
+      ];
+
+      // Wait for results panel to appear
+      let resultsPanelVisible = false;
+      for (const selector of resultPanelSelectors) {
+        try {
+          const panel = page.locator(selector).first();
+          if (await panel.count() > 0) {
+            await panel.waitFor({ state: 'visible', timeout: 5000 });
+            resultsPanelVisible = true;
+            break;
+          }
+        } catch (e) {
+          // Continue
+        }
+      }
+
+      if (!resultsPanelVisible) {
+        await page.waitForTimeout(2000); // Wait a bit more
+      }
+
+      // Step 9: Find and click on parcel in the results table
+      // Look for "Parcelles du cadastre" table
+      const tableSelectors = [
+        'table:has-text("Parcelles")',
+        'table:has-text("cadastre")',
+        '.dijitContentPane table',
+        '[role="table"]',
+        'table',
+      ];
+
+      let parcelClicked = false;
+      let parcelRow = null;
+
+      for (const tableSelector of tableSelectors) {
+        try {
+          const tables = page.locator(tableSelector);
+          const tableCount = await tables.count();
+          
+          for (let t = 0; t < tableCount; t++) {
+            const table = tables.nth(t);
+            const tableText = await table.textContent();
+            
+            // Check if this is the parcels table
+            if (tableText && (tableText.includes("Parcelles") || tableText.includes("cadastre"))) {
+              // Find data rows (skip header)
+              const rows = table.locator('tbody tr, tr');
+              const rowCount = await rows.count();
+              
+              // Look for the first data row with parcel information
+              for (let r = 1; r < rowCount; r++) {
+                const row = rows.nth(r);
+                const rowText = await row.textContent();
+                
+                // Check if row has parcel data (usually has section, radical, etc.)
+                if (rowText && (rowText.includes("Section") || rowText.match(/\d{5}[A-Z]\d{4}/))) {
+                  // Try to find a clickable element in this row
+                  const clickableElements = row.locator('a, button, [onclick], [role="button"]');
+                  const clickableCount = await clickableElements.count();
+                  
+                  if (clickableCount > 0) {
+                    const firstClickable = clickableElements.first();
+                    if (await firstClickable.isVisible()) {
+                      await firstClickable.click();
+                      await page.waitForTimeout(3000);
+                      parcelClicked = true;
+                      parcelRow = row;
+                      break;
+                    }
+                  } else {
+                    // If no clickable element, click the row itself
+                    if (await row.isVisible()) {
+                      await row.click();
+                      await page.waitForTimeout(3000);
+                      parcelClicked = true;
+                      parcelRow = row;
+                      break;
+                    }
+                  }
+                  
+                  if (parcelClicked) break;
+                }
+              }
+              
+              if (parcelClicked) break;
+            }
+          }
+          
+          if (parcelClicked) break;
+        } catch (e) {
+          // Continue to next table selector
+        }
+      }
+
+      // Alternative: Look for any link containing parcel information
+      if (!parcelClicked) {
+        const linkSelectors = [
+          'a:has-text("parcelle")',
+          'a[href*="parcelle"]',
+          'a[href*="parcel"]',
+        ];
+
+        for (const selector of linkSelectors) {
+          try {
+            const links = page.locator(selector);
+            const count = await links.count();
+            
+            if (count > 0) {
+              for (let i = 0; i < count; i++) {
+                const link = links.nth(i);
+                if (await link.isVisible()) {
+                  await link.click();
+                  await page.waitForTimeout(3000);
+                  parcelClicked = true;
+                  break;
+                }
+              }
+              if (parcelClicked) break;
+            }
+          } catch (e) {
+            // Continue
+          }
+        }
+      }
+
+      if (!parcelClicked) {
+        result.status = "ADDRESS_NOT_FOUND";
+        result.errorMessage = "No parcels found in identification results or could not click on parcel";
+        return result;
+      }
+
+      // Check if multiple parcels were found
+      const parcelRows = await page.locator('table tr:has-text("Section"), table tr:has-text("Radical")').count();
+      if (parcelRows > 2) {
         result.status = "MULTIPLE_PARCELS";
       }
 
