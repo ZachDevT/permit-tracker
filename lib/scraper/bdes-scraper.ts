@@ -221,28 +221,178 @@ export class BDESScraper {
       await page.waitForTimeout(3000);
 
       // Step 6: Click the stethoscope icon (medical tool icon) - identification tool
+      // The stethoscope icon is in the toolbar above the map
+      // Based on the images, it's one of the icons in the toolbar row (usually 6th or 7th icon)
+      
+      await page.waitForTimeout(3000); // Wait for toolbar to be fully loaded
+      
+      // First, try to wait for the toolbar to be visible
+      try {
+        await page.waitForSelector('.dijitToolbar, [class*="toolbar"]', { timeout: 5000 });
+      } catch (e) {
+        // Toolbar might not have that class, continue anyway
+      }
+      
       const stethoscopeSelectors = [
+        // Look for stethoscope by class names (common patterns)
         '[class*="stethoscope"]',
         '[class*="identify"]',
+        '[class*="Identify"]',
+        '[class*="identification"]',
+        // Look for button with title/aria-label
         'button[title*="identification"]',
+        'button[title*="identifier"]',
         'button[aria-label*="identification"]',
-        '[title*="identifier"]',
+        'button[aria-label*="identifier"]',
+        // Look in dijit buttons
         '.dijitButton:has([class*="stethoscope"])',
         '.dijitButton:has([class*="identify"])',
-        'span:has([class*="stethoscope"])',
+        '.dijitButton[title*="identification"]',
+        // Look for span with stethoscope icon
+        'span[class*="stethoscope"]',
+        'span[class*="identify"]',
+        // Look for any element with stethoscope in class
+        '[class*="myCustomAdvancedIdentifyButton"]',
+        // Look in toolbar - try to find by position (usually 6th or 7th icon)
+        '.dijitToolbar .dijitButton:nth-child(6)',
+        '.dijitToolbar .dijitButton:nth-child(7)',
+        // Look for all buttons in toolbar and find the one with stethoscope
+        '.dijitToolbar button',
+        '.dijitToolbar .dijitButton',
       ];
 
       let stethoscopeClicked = false;
+      
+      // Method 1: Try specific selectors
       for (const selector of stethoscopeSelectors) {
         try {
-          const stethoscope = page.locator(selector).first();
-          if (await stethoscope.count() > 0) {
-            const isVisible = await stethoscope.isVisible();
+          const elements = page.locator(selector);
+          const count = await elements.count();
+          
+          for (let i = 0; i < count; i++) {
+            const element = elements.nth(i);
+            const isVisible = await element.isVisible().catch(() => false);
+            
             if (isVisible) {
-              await stethoscope.click();
-              await page.waitForTimeout(2000);
-              stethoscopeClicked = true;
-              break;
+              // Check if this element or its children contain stethoscope-related classes
+              const classAttr = await element.getAttribute('class').catch(() => '');
+              const titleAttr = await element.getAttribute('title').catch(() => '');
+              const ariaLabel = await element.getAttribute('aria-label').catch(() => '');
+              
+              const combinedText = (classAttr + ' ' + titleAttr + ' ' + ariaLabel).toLowerCase();
+              
+              if (combinedText.includes('stethoscope') || 
+                  combinedText.includes('identify') || 
+                  combinedText.includes('identification') ||
+                  combinedText.includes('identifier')) {
+                await element.click({ timeout: 3000 });
+                await page.waitForTimeout(2000);
+                stethoscopeClicked = true;
+                break;
+              }
+            }
+          }
+          
+          if (stethoscopeClicked) break;
+        } catch (e) {
+          // Continue to next selector
+        }
+      }
+      
+      // Method 2: Look for all buttons in toolbar and click the one that looks like stethoscope
+      if (!stethoscopeClicked) {
+        try {
+          const toolbarButtons = page.locator('.dijitToolbar button, .dijitToolbar .dijitButton, [class*="toolbar"] button');
+          const buttonCount = await toolbarButtons.count();
+          
+          // The stethoscope is usually one of the later buttons (6th or 7th)
+          const buttonsToTry = Math.min(buttonCount, 10);
+          
+          for (let i = 0; i < buttonsToTry; i++) {
+            try {
+              const button = toolbarButtons.nth(i);
+              if (await button.isVisible()) {
+                // Get button info
+                const buttonClass = await button.getAttribute('class').catch(() => '');
+                const buttonTitle = await button.getAttribute('title').catch(() => '');
+                const buttonText = await button.textContent().catch(() => '');
+                
+                // Check if it might be the stethoscope (usually has no text, just an icon)
+                if ((!buttonText || buttonText.trim() === '') && (buttonClass.includes('Button') || buttonTitle)) {
+                  // Try clicking it - if it's the stethoscope, results panel should appear
+                  await button.click({ timeout: 2000 });
+                  await page.waitForTimeout(3000);
+                  
+                  // Check if identification results appeared
+                  const resultsCheck = page.locator('text=/RÉSULTAT/i, text=/RESULTAT/i, text=/Parcelles/i');
+                  if (await resultsCheck.count() > 0) {
+                    stethoscopeClicked = true;
+                    break;
+                  }
+                  
+                  // If not, try clicking on map to see if tool is active
+                  const mapContainer = page.locator('#esri\\.Map_0_container, .esriMapContainer').first();
+                  if (await mapContainer.count() > 0) {
+                    const mapBox = await mapContainer.boundingBox();
+                    if (mapBox) {
+                      await page.mouse.click(mapBox.x + mapBox.width / 2, mapBox.y + mapBox.height / 2);
+                      await page.waitForTimeout(2000);
+                      
+                      // Check again for results
+                      if (await resultsCheck.count() > 0) {
+                        stethoscopeClicked = true;
+                        break;
+                      }
+                    }
+                  }
+                }
+              }
+            } catch (e) {
+              // Continue to next button
+            }
+          }
+        } catch (e) {
+          // Continue
+        }
+      }
+      
+      // Method 3: Try to find by SVG path or icon content (stethoscope usually has a specific icon)
+      if (!stethoscopeClicked) {
+        try {
+          // Look for SVG elements that might represent a stethoscope
+          const svgElements = page.locator('svg, [class*="icon"]');
+          const svgCount = await svgElements.count();
+          
+          for (let i = 0; i < Math.min(svgCount, 20); i++) {
+            try {
+              const svg = svgElements.nth(i);
+              const parent = svg.locator('..');
+              
+              if (await parent.isVisible()) {
+                const parentClass = await parent.getAttribute('class').catch(() => '');
+                if (parentClass.includes('Button') || parentClass.includes('button')) {
+                  await parent.click({ timeout: 2000 });
+                  await page.waitForTimeout(2000);
+                  
+                  // Check if stethoscope tool is now active
+                  const mapClick = page.locator('#esri\\.Map_0_container, .esriMapContainer').first();
+                  if (await mapClick.count() > 0) {
+                    const mapBox = await mapClick.boundingBox();
+                    if (mapBox) {
+                      await page.mouse.click(mapBox.x + mapBox.width / 2, mapBox.y + mapBox.height / 2);
+                      await page.waitForTimeout(3000);
+                      
+                      const resultsCheck = page.locator('text=/Parcelles/i, text=/RESULTAT/i');
+                      if (await resultsCheck.count() > 0) {
+                        stethoscopeClicked = true;
+                        break;
+                      }
+                    }
+                  }
+                }
+              }
+            } catch (e) {
+              // Continue
             }
           }
         } catch (e) {
@@ -252,7 +402,7 @@ export class BDESScraper {
 
       if (!stethoscopeClicked) {
         result.status = "ADDRESS_NOT_FOUND";
-        result.errorMessage = "Stethoscope/identification tool not found";
+        result.errorMessage = "Stethoscope/identification tool not found. Please verify the page structure.";
         return result;
       }
 
