@@ -327,60 +327,98 @@ export class BDESScraper {
       }
 
       // Step 9: Find and click on parcel in the results table
-      // Look for "Parcelles du cadastre" table
-      const tableSelectors = [
-        'table:has-text("Parcelles")',
-        'table:has-text("cadastre")',
-        '.dijitContentPane table',
-        '[role="table"]',
-        'table',
-      ];
-
+      // Look for "Parcelles du cadastre" table in the identification results
+      // The table should be in a panel titled "RÉSULTAT DE L'IDENTIFICATION"
+      
       let parcelClicked = false;
-      let parcelRow = null;
-
-      for (const tableSelector of tableSelectors) {
-        try {
-          const tables = page.locator(tableSelector);
-          const tableCount = await tables.count();
+      
+      // First, try to find the table by looking for "Parcelles du cadastre" header
+      const parcelTableHeader = page.locator('text=/Parcelles du cadastre/i, text=/Parcelles cadastrales/i').first();
+      
+      if (await parcelTableHeader.count() > 0) {
+        // Find the table near this header
+        const table = parcelTableHeader.locator('..').locator('table').first();
+        
+        if (await table.count() > 0) {
+          // Get all rows in the table
+          const rows = table.locator('tbody tr, tr');
+          const rowCount = await rows.count();
           
-          for (let t = 0; t < tableCount; t++) {
-            const table = tables.nth(t);
+          // Skip header row(s), start from row 1 or 2
+          for (let r = 1; r < Math.min(rowCount, 5); r++) {
+            try {
+              const row = rows.nth(r);
+              const rowText = await row.textContent();
+              
+              // Check if this is a data row (has CAPAKEY or similar parcel identifier)
+              if (rowText && rowText.length > 10 && !rowText.includes("CAPAKEY")) {
+                // Try clicking on the row
+                const rowBox = await row.boundingBox();
+                if (rowBox) {
+                  // Click on the row
+                  await page.mouse.click(rowBox.x + rowBox.width / 2, rowBox.y + rowBox.height / 2);
+                  await page.waitForTimeout(3000);
+                  
+                  // Check if we navigated to a new page (parcel detail page)
+                  const newUrl = page.url();
+                  if (newUrl !== this.BASE_URL && newUrl.includes("parcelle")) {
+                    parcelClicked = true;
+                    break;
+                  }
+                  
+                  // Alternative: Look for double-click or link in the row
+                  const linkInRow = row.locator('a').first();
+                  if (await linkInRow.count() > 0) {
+                    await linkInRow.click();
+                    await page.waitForTimeout(3000);
+                    parcelClicked = true;
+                    break;
+                  }
+                }
+              }
+            } catch (e) {
+              // Continue to next row
+            }
+          }
+        }
+      }
+      
+      // Alternative method: Look for any table with parcel data
+      if (!parcelClicked) {
+        const allTables = page.locator('table');
+        const tableCount = await allTables.count();
+        
+        for (let t = 0; t < tableCount; t++) {
+          try {
+            const table = allTables.nth(t);
             const tableText = await table.textContent();
             
-            // Check if this is the parcels table
-            if (tableText && (tableText.includes("Parcelles") || tableText.includes("cadastre"))) {
-              // Find data rows (skip header)
+            // Check if this table contains parcel information
+            if (tableText && (tableText.includes("Section") || tableText.includes("Radical") || tableText.includes("CAPAKEY"))) {
               const rows = table.locator('tbody tr, tr');
               const rowCount = await rows.count();
               
-              // Look for the first data row with parcel information
+              // Find first data row
               for (let r = 1; r < rowCount; r++) {
                 const row = rows.nth(r);
                 const rowText = await row.textContent();
                 
-                // Check if row has parcel data (usually has section, radical, etc.)
-                if (rowText && (rowText.includes("Section") || rowText.match(/\d{5}[A-Z]\d{4}/))) {
-                  // Try to find a clickable element in this row
-                  const clickableElements = row.locator('a, button, [onclick], [role="button"]');
-                  const clickableCount = await clickableElements.count();
-                  
-                  if (clickableCount > 0) {
-                    const firstClickable = clickableElements.first();
-                    if (await firstClickable.isVisible()) {
-                      await firstClickable.click();
+                // Skip header rows
+                if (rowText && !rowText.includes("CAPAKEY") && !rowText.includes("Section") && rowText.length > 20) {
+                  // Try to click on the row
+                  try {
+                    await row.click({ timeout: 2000 });
+                    await page.waitForTimeout(3000);
+                    parcelClicked = true;
+                    break;
+                  } catch (e) {
+                    // Try clicking on a cell
+                    const cells = row.locator('td');
+                    const cellCount = await cells.count();
+                    if (cellCount > 0) {
+                      await cells.first().click({ timeout: 2000 });
                       await page.waitForTimeout(3000);
                       parcelClicked = true;
-                      parcelRow = row;
-                      break;
-                    }
-                  } else {
-                    // If no clickable element, click the row itself
-                    if (await row.isVisible()) {
-                      await row.click();
-                      await page.waitForTimeout(3000);
-                      parcelClicked = true;
-                      parcelRow = row;
                       break;
                     }
                   }
@@ -391,11 +429,9 @@ export class BDESScraper {
               
               if (parcelClicked) break;
             }
+          } catch (e) {
+            // Continue to next table
           }
-          
-          if (parcelClicked) break;
-        } catch (e) {
-          // Continue to next table selector
         }
       }
 
