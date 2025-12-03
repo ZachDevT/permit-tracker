@@ -70,103 +70,240 @@ export class BDESScraper {
       await page.waitForTimeout(3000);
 
       // Look for the terms and conditions acceptance modal
+      let conditionsAccepted = false;
+      
       try {
-        // Method 1: Look for checkbox with "J'ai lu et j'accepte"
+        // Method 1: Look for checkbox with "J'ai lu et j'accepte" - try multiple approaches
         const checkboxSelectors = [
           'input[type="checkbox"]:near(:text("J\'ai lu"))',
           'input[type="checkbox"]:near(:text("accepte"))',
+          'input[type="checkbox"]:near(:text("J\'accepte"))',
           'label:has-text("J\'ai lu") input[type="checkbox"]',
-          '.dijitCheckBox:has-text("J\'ai lu")',
+          'label:has-text("J\'accepte") input[type="checkbox"]',
+          'label:has-text("accepte") input[type="checkbox"]',
+          '.dijitCheckBox input[type="checkbox"]',
+          'input[type="checkbox"]',
         ];
 
         for (const selector of checkboxSelectors) {
           try {
-            const checkbox = page.locator(selector).first();
-            if (await checkbox.count() > 0 && await checkbox.isVisible()) {
-              await checkbox.check({ timeout: 2000 });
-              await page.waitForTimeout(1000);
-              break;
+            const checkboxes = page.locator(selector);
+            const count = await checkboxes.count();
+            
+            for (let i = 0; i < count; i++) {
+              const checkbox = checkboxes.nth(i);
+              if (await checkbox.isVisible()) {
+                // Check if this checkbox is in a modal/dialog about conditions
+                const parent = checkbox.locator('..').locator('..');
+                const parentText = await parent.textContent().catch(() => '') || '';
+                
+                if (parentText.includes('conditions') || parentText.includes('utilisation') || parentText.includes('accepte')) {
+                  await checkbox.check({ timeout: 2000 });
+                  await page.waitForTimeout(1000);
+                  conditionsAccepted = true;
+                  addStep("Gestion des conditions d'utilisation", "success", "Checkbox cochée");
+                  break;
+                }
+              }
             }
+            
+            if (conditionsAccepted) break;
           } catch (e) {
             // Try next selector
           }
         }
+        
+        // If no specific checkbox found, try checking any visible checkbox in a modal
+        if (!conditionsAccepted) {
+          const allCheckboxes = page.locator('input[type="checkbox"]');
+          const checkboxCount = await allCheckboxes.count();
+          
+          for (let i = 0; i < checkboxCount; i++) {
+            try {
+              const checkbox = allCheckboxes.nth(i);
+              if (await checkbox.isVisible()) {
+                // Check if it's in a dialog/modal
+                const dialog = checkbox.locator('..').locator('..').locator('..').locator('[class*="dialog"], [class*="Dialog"], [class*="modal"]');
+                if (await dialog.count() > 0) {
+                  await checkbox.check({ timeout: 2000 });
+                  await page.waitForTimeout(1000);
+                  conditionsAccepted = true;
+                  addStep("Gestion des conditions d'utilisation", "success", "Checkbox dans modal cochée");
+                  break;
+                }
+              }
+            } catch (e) {
+              // Continue
+            }
+          }
+        }
 
-        // Method 2: Look for Accept button
+        // Method 2: Look for Accept button - try multiple approaches
         const acceptButtonSelectors = [
           'button:has-text("Accepter")',
           'button:has-text("Accept")',
+          'span:has-text("Accepter"):visible',
           '[role="button"]:has-text("Accepter")',
           '.dijitButton:has-text("Accepter")',
-          'span:has-text("Accepter"):visible',
+          '.dijitButton span:has-text("Accepter")',
+          'button span:has-text("Accepter")',
         ];
 
         for (const selector of acceptButtonSelectors) {
           try {
-            const acceptButton = page.locator(selector).first();
-            if (await acceptButton.count() > 0 && await acceptButton.isVisible()) {
-              await acceptButton.click({ timeout: 2000 });
-              await page.waitForTimeout(2000);
-              break;
+            const acceptButtons = page.locator(selector);
+            const count = await acceptButtons.count();
+            
+            for (let i = 0; i < count; i++) {
+              const acceptButton = acceptButtons.nth(i);
+              if (await acceptButton.isVisible()) {
+                await acceptButton.click({ timeout: 2000 });
+                await page.waitForTimeout(2000);
+                conditionsAccepted = true;
+                addStep("Gestion des conditions d'utilisation", "success", "Bouton Accepter cliqué");
+                break;
+              }
             }
+            
+            if (conditionsAccepted) break;
           } catch (e) {
             // Try next selector
           }
         }
       } catch (e) {
-        // Modal might not be present, continue
-        addStep("Gestion des conditions d'utilisation", "success", "Modal non présente ou déjà acceptée");
+        console.log("Error handling conditions modal:", e);
       }
       
-      // Check if we actually accepted
-      const termsStillVisible = await page.locator('text=/conditions d\'utilisation/i').count();
-      if (termsStillVisible === 0) {
-        addStep("Gestion des conditions d'utilisation", "success", "Conditions acceptées");
+      // Verify if conditions were accepted
+      if (!conditionsAccepted) {
+        // Check if modal is still visible
+        const conditionsModal = page.locator('text=/conditions/i, text=/utilisation/i, [class*="dialog"]:has-text("conditions")');
+        const modalCount = await conditionsModal.count();
+        
+        if (modalCount > 0) {
+          addStep("Gestion des conditions d'utilisation", "error", "Modal toujours visible");
+        } else {
+          addStep("Gestion des conditions d'utilisation", "success", "Modal non présente ou déjà acceptée");
+        }
       }
 
       // Step 2: Handle "Mode d'emploi et conseils d'utilisation" dialog
       addStep("Fermeture du dialog d'aide", "pending");
       await page.waitForTimeout(2000);
 
+      let helpDialogClosed = false;
+      
       try {
-        // Look for close button (X) in dialog title bar
+        // Method 1: Look for close button (X) in dialog title bar
         const closeButtonSelectors = [
           '.dijitDialogCloseIcon',
           '[class*="dijitDialogClose"]',
+          '[class*="DialogClose"]',
+          '.dijitTitleBar .dijitDialogCloseIcon',
+          '.dijitTitleBar [class*="close"]',
           'button[title*="Fermer"]',
           'button[aria-label*="Fermer"]',
           'button[aria-label*="Close"]',
           'span[class*="close"]:visible',
-          '.dijitTitleBar .dijitDialogCloseIcon',
+          '[class*="closeIcon"]',
         ];
 
         for (const selector of closeButtonSelectors) {
           try {
-            const closeButton = page.locator(selector).first();
-            if (await closeButton.count() > 0 && await closeButton.isVisible()) {
-              await closeButton.click({ timeout: 2000 });
-              await page.waitForTimeout(1500);
-              break;
+            const closeButtons = page.locator(selector);
+            const count = await closeButtons.count();
+            
+            for (let i = 0; i < count; i++) {
+              const closeButton = closeButtons.nth(i);
+              if (await closeButton.isVisible()) {
+                // Check if it's in a dialog
+                const dialog = closeButton.locator('..').locator('..').locator('[class*="dialog"], [class*="Dialog"]');
+                if (await dialog.count() > 0 || await closeButton.locator('..').locator('[class*="dialog"]').count() > 0) {
+                  await closeButton.click({ timeout: 2000 });
+                  await page.waitForTimeout(1500);
+                  helpDialogClosed = true;
+                  addStep("Fermeture du dialog d'aide", "success", "Bouton X cliqué");
+                  break;
+                }
+              }
             }
+            
+            if (helpDialogClosed) break;
           } catch (e) {
             // Try next selector
           }
         }
 
-        // Alternative: Look for "Fermer" button
-        const fermerButton = page.locator('button:has-text("Fermer"), span:has-text("Fermer"):visible').first();
-        if (await fermerButton.count() > 0 && await fermerButton.isVisible()) {
-          await fermerButton.click({ timeout: 2000 });
-          await page.waitForTimeout(1500);
+        // Method 2: Look for "Fermer" button in dialog
+        if (!helpDialogClosed) {
+          const fermerButtons = page.locator('button:has-text("Fermer"), span:has-text("Fermer"):visible, [role="button"]:has-text("Fermer")');
+          const fermerCount = await fermerButtons.count();
+          
+          for (let i = 0; i < fermerCount; i++) {
+            try {
+              const fermerButton = fermerButtons.nth(i);
+              if (await fermerButton.isVisible()) {
+                // Check if it's in a dialog about help/mode d'emploi
+                const parent = fermerButton.locator('..').locator('..').locator('..');
+                const parentText = await parent.textContent().catch(() => '') || '';
+                
+                if (parentText.includes('Mode d\'emploi') || parentText.includes('conseil') || parentText.includes('aide')) {
+                  await fermerButton.click({ timeout: 2000 });
+                  await page.waitForTimeout(1500);
+                  helpDialogClosed = true;
+                  addStep("Fermeture du dialog d'aide", "success", "Bouton Fermer cliqué");
+                  break;
+                }
+              }
+            } catch (e) {
+              // Continue
+            }
+          }
+        }
+        
+        // Method 3: Look for any dialog and try to close it
+        if (!helpDialogClosed) {
+          const dialogs = page.locator('[class*="dialog"], [class*="Dialog"], [class*="modal"]:visible');
+          const dialogCount = await dialogs.count();
+          
+          for (let i = 0; i < dialogCount; i++) {
+            try {
+              const dialog = dialogs.nth(i);
+              if (await dialog.isVisible()) {
+                const dialogText = await dialog.textContent().catch(() => '') || '';
+                
+                // Check if it's a help/instructions dialog
+                if (dialogText.includes('Mode d\'emploi') || dialogText.includes('conseil') || dialogText.includes('aide')) {
+                  // Try to find close button in this dialog
+                  const closeInDialog = dialog.locator('.dijitDialogCloseIcon, [class*="close"], button:has-text("Fermer")').first();
+                  if (await closeInDialog.count() > 0 && await closeInDialog.isVisible()) {
+                    await closeInDialog.click({ timeout: 2000 });
+                    await page.waitForTimeout(1500);
+                    helpDialogClosed = true;
+                    addStep("Fermeture du dialog d'aide", "success", "Dialog d'aide fermé");
+                    break;
+                  }
+                }
+              }
+            } catch (e) {
+              // Continue
+            }
+          }
         }
       } catch (e) {
-        // Dialog might not be present, continue
-        addStep("Fermeture du dialog d'aide", "success", "Dialog non présent ou déjà fermé");
+        console.log("Error handling help dialog:", e);
       }
       
-      const helpStillVisible = await page.locator('text=/Mode d\'emploi/i').count();
-      if (helpStillVisible === 0) {
-        addStep("Fermeture du dialog d'aide", "success", "Dialog fermé");
+      // Verify if dialog was closed
+      if (!helpDialogClosed) {
+        const helpStillVisible = page.locator('text=/Mode d\'emploi/i, text=/conseil/i');
+        const helpCount = await helpStillVisible.count();
+        
+        if (helpCount > 0) {
+          addStep("Fermeture du dialog d'aide", "error", "Dialog toujours visible");
+        } else {
+          addStep("Fermeture du dialog d'aide", "success", "Dialog non présent ou déjà fermé");
+        }
       }
 
       // Step 3: Wait for the search field to be available
@@ -456,44 +593,38 @@ export class BDESScraper {
         }
       }
       
-      // Method 3: Try to find by SVG path or icon content (stethoscope usually has a specific icon)
+      // Method 3: Find by the specific class from the image (myCustomAdvancedIdentifyButton)
+      // The class is on a span, but we need to click the parent button
       if (!stethoscopeClicked) {
         try {
-          // Look for SVG elements that might represent a stethoscope
-          const svgElements = page.locator('svg, [class*="icon"]');
-          const svgCount = await svgElements.count();
-          
-          for (let i = 0; i < Math.min(svgCount, 20); i++) {
-            try {
-              const svg = svgElements.nth(i);
-              const parent = svg.locator('..');
-              
-                if (await parent.isVisible()) {
-                const parentClass = await parent.getAttribute('class').catch(() => '') || '';
-                if (parentClass.includes('Button') || parentClass.includes('button')) {
-                  await parent.click({ timeout: 2000 });
-                  await page.waitForTimeout(2000);
-                  
-                  // Check if stethoscope tool is now active
-                  const mapClick = page.locator('#esri\\.Map_0_container, .esriMapContainer').first();
-                  if (await mapClick.count() > 0) {
-                    const mapBox = await mapClick.boundingBox();
-                    if (mapBox) {
-                      await page.mouse.click(mapBox.x + mapBox.width / 2, mapBox.y + mapBox.height / 2);
-                      await page.waitForTimeout(3000);
-                      
-                      const resultsCheck = page.locator('text=/Parcelles/i, text=/RESULTAT/i');
-                      if (await resultsCheck.count() > 0) {
-                        stethoscopeClicked = true;
-                        break;
-                      }
-                    }
-                  }
-                }
-              }
-            } catch (e) {
-              // Continue
+          const advancedIdentifySpan = page.locator('.myCustomAdvancedIdentifyButton, [class*="myCustomAdvancedIdentify"]').first();
+          if (await advancedIdentifySpan.count() > 0) {
+            // Click the parent button instead of the span
+            const parentButton = advancedIdentifySpan.locator('..').locator('button, [role="button"]').first();
+            if (await parentButton.count() > 0) {
+              await parentButton.click({ timeout: 3000, force: true });
+              await page.waitForTimeout(2000);
+              stethoscopeClicked = true;
+            } else {
+              // Try clicking the span with force
+              await advancedIdentifySpan.click({ timeout: 3000, force: true });
+              await page.waitForTimeout(2000);
+              stethoscopeClicked = true;
             }
+          }
+        } catch (e) {
+          // Continue
+        }
+      }
+      
+      // Method 4: Click button with title "Informations sur l'état des sols"
+      if (!stethoscopeClicked) {
+        try {
+          const infoButton = page.locator('button[title="Informations sur l\'état des sols"]').first();
+          if (await infoButton.count() > 0 && await infoButton.isVisible()) {
+            await infoButton.click({ timeout: 3000, force: true });
+            await page.waitForTimeout(2000);
+            stethoscopeClicked = true;
           }
         } catch (e) {
           // Continue
